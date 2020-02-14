@@ -2,20 +2,27 @@ module github.com/datawire/ambassador
 
 go 1.13
 
+// `go mod tidy` is going to try to remove `github.com/cncf/udpa`--don't let it!
+// That will break `make generate`.  Keep the github.com/cncf/udpa version
+// in-sync with the github.com/cncf/udpa/go version.
+
 require (
 	git.lukeshu.com/go/libsystemd v0.5.3
 	github.com/Masterminds/semver v1.4.2 // indirect
 	github.com/Masterminds/sprig v2.17.1+incompatible
 	github.com/aokoli/goutils v1.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
+	github.com/cncf/udpa v0.0.0-20200124205748-db4b343e48c1
+	github.com/cncf/udpa/go v0.0.0-20200124205748-db4b343e48c1
 	github.com/datawire/libk8s v0.0.0-20191023073802-9add2eb01af2
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/ecodia/golang-awaitility v0.0.0-20180710094957-fb55e59708c7
-	github.com/envoyproxy/protoc-gen-validate v0.0.15-0.20190405222122-d6164de49109
+	github.com/envoyproxy/protoc-gen-validate v0.2.0-java.0.20191226181232-973ea075fe98
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/gogo/protobuf v1.3.0
 	github.com/golang/protobuf v1.3.2
+	github.com/google/go-cmp v0.3.0
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.0
@@ -36,7 +43,7 @@ require (
 	golang.org/x/crypto v0.0.0-20190611184440-5c40567a22f8
 	golang.org/x/net v0.0.0-20190812203447-cdfb69ac37fc
 	golang.org/x/sys v0.0.0-20191024073052-e66fe6eb8e0c
-	google.golang.org/grpc v1.23.0
+	google.golang.org/grpc v1.25.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.2.4
 	istio.io/gogo-genproto v0.0.0-20190904133402-ee07f2785480
