@@ -19,4 +19,4 @@
 
 FROM ubuntu:18.04
 
-ADD ./envoy-static /usr/local/bin/envoy
+ADD ./envoy-static ./envoy-static-stripped /usr/local/bin/
