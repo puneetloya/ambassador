@@ -13,7 +13,7 @@ IS_PRIVATE ?= $(findstring private,$(_git_remote_urls))
   ENVOY_COMMIT ?= 4f6ae4e71699d1c7ee1a6dd8be55e65bfd085b3d
   ENVOY_COMPILATION_MODE ?= opt
   # Increment BASE_ENVOY_RELVER on changes to `docker/base-envoy/Dockerfile`, or Envoy recipes
-  BASE_ENVOY_RELVER ?= 9
+  BASE_ENVOY_RELVER ?= 10
 
   ENVOY_DOCKER_REPO ?= quay.io/datawire/ambassador-base$(if $(IS_PRIVATE),-private)
   ENVOY_DOCKER_VERSION ?= $(BASE_ENVOY_RELVER).$(ENVOY_COMMIT).$(ENVOY_COMPILATION_MODE)
@@ -154,8 +154,8 @@ envoy-shell: $(ENVOY_BASH.deps)
 $(OSS_HOME)/api/envoy: $(srcdir)/envoy
 	rsync --recursive --delete --delete-excluded --prune-empty-dirs --include='*/' --include='*.proto' --exclude='*' $</api/envoy/ $@
 
-update-base: $(OSS_HOME)/docker/base-envoy/envoy-static $(OSS_HOME)/docker/base-envoy/envoy-static-stripped
-	docker build -t $(ENVOY_DOCKER_TAG) $(OSS_HOME)/docker/base-envoy
+update-base: $(srcdir)/envoy-build-image.txt $(OSS_HOME)/docker/base-envoy/envoy-static $(OSS_HOME)/docker/base-envoy/envoy-static-stripped
+	docker build --build-arg=base=$$(cat $(srcdir)/envoy-build-image.txt) -t $(ENVOY_DOCKER_TAG) $(OSS_HOME)/docker/base-envoy
 	$(MAKE) generate
 	docker push $(ENVOY_DOCKER_TAG)
 .PHONY: update-base
