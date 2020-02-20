@@ -373,7 +373,7 @@ def v2filter_authv1(auth: IRAuth, v2config: 'V2Config'):
                     },
                     'timeout': "%0.3fs" % (float(auth.timeout_ms) / 1000.0)
                 },
-                'use_alpha': True
+                'use_alpha': True # TODO: Add a setting to turn this off, so we can drop envoy.deprecated_features:envoy.config.filter.http.ext_authz.v2.ExtAuthz.use_alpha
             }
         }
 
