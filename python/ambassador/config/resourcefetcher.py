@@ -79,7 +79,7 @@ class ResourceFetcher:
             init_dir = '/ambassador/init-config'
 
             if os.path.isdir(init_dir):
-                self.load_from_filesystem(init_dir, k8s=True, recurse=True, finalize=False)
+                self.load_from_filesystem(init_dir, recurse=True, finalize=False)
 
     @property
     def location(self):
@@ -94,7 +94,7 @@ class ResourceFetcher:
         self.filename, self.ocount = self.saved.pop()
 
     def load_from_filesystem(self, config_dir_path, recurse: bool=False,
-                             k8s: bool=False, finalize: bool=True):
+                             finalize: bool=True):
         inputs: List[Tuple[str, str]] = []
 
         if os.path.isdir(config_dir_path):
@@ -132,16 +132,16 @@ class ResourceFetcher:
 
             try:
                 serialization = open(filepath, "r").read()
-                self.parse_yaml(serialization, k8s=k8s, filename=filepath, finalize=False)
+                self.parse_yaml(serialization, filename=filepath, finalize=False)
             except IOError as e:
                 self.aconf.post_error("could not read YAML from %s: %s" % (filepath, e))
 
         if finalize:
             self.finalize()
 
-    def parse_yaml(self, serialization: str, k8s=False, rkey: Optional[str]=None,
-                   filename: Optional[str]=None, finalize: bool=True, namespace: Optional[str]=None,
-                   metadata_labels: Optional[Dict[str, str]]=None) -> None:
+    def parse_yaml(self, serialization: str,
+                   filename: Optional[str]=None,
+                   finalize: bool=True) -> None:
         # self.logger.info(f"RF YAML: {serialization}")
 
         # Expand environment variables allowing interpolation in manifests.
@@ -150,8 +150,7 @@ class ResourceFetcher:
         try:
             # UGH. This parse_yaml is the one we imported from utils. XXX This needs to be fixed.
             objects = parse_yaml(serialization)
-            self.parse_object(objects=objects, k8s=k8s, rkey=rkey, filename=filename,
-                              namespace=namespace)
+            self.process_objects(objects, consider_annotations=True, filename=filename)
         except yaml.error.YAMLError as e:
             self.aconf.post_error("%s: could not parse YAML: %s" % (self.location, e))
 
@@ -186,17 +185,9 @@ class ResourceFetcher:
 
             watt_k8s = watt_dict.get('Kubernetes', {})
 
-            # Handle normal Kube objects...
-            for key in [ 'service', 'endpoints', 'secret', 'ingresses' ]:
-                for obj in watt_k8s.get(key) or []:
-                    # self.logger.debug(f"Handling Kubernetes {key}...")
-                    self.handle_k8s(obj)
-
-            # ...then handle Ambassador CRDs.
-            for key in CRDTypes:
-                for obj in watt_k8s.get(key) or []:
-                    # self.logger.debug(f"Handling CRD {key}...")
-                    self.handle_k8s_crd(obj)
+            for key in CRDTypes.union([ 'service', 'endpoints', 'secret', 'ingresses' ]):
+                objs = watt_k8s.get(key) or []
+                process_objects(objs, consider_annotations=True)
 
             watt_consul = watt_dict.get('Consul', {})
             consul_endpoints = watt_consul.get('Endpoints', {})
@@ -258,7 +249,7 @@ class ResourceFetcher:
         if result:
             rkey, parsed_objects = result
 
-            self.parse_object(parsed_objects, k8s=False, filename=self.filename, rkey=rkey)
+            self.process_objects(parsed_objects, consider_annotations=False, filename=self.filename)
 
     def handle_k8s_crd(self, obj: dict) -> None:
         # CRDs are _not_ allowed to have embedded objects in annotations, because ew.
@@ -340,29 +331,34 @@ class ResourceFetcher:
         amb_object['metadata_labels']['ambassador_crd'] = resource_identifier
 
         # Done. Parse it.
-        self.parse_object([ amb_object ], k8s=False, filename=self.filename, rkey=resource_identifier)
+        self.process_object(amb_object, rkey=resource_identifier)
 
-    def parse_object(self, objects, k8s=False, rkey: Optional[str]=None,
-                     filename: Optional[str]=None, namespace: Optional[str]=None):
+    def process_objects(self, objects, consider_annotations: bool,
+                        filename: Optional[str]=None):
         self.push_location(filename, 1)
 
-        # self.logger.debug("PARSE_OBJECT: incoming %d" % len(objects))
+        # self.logger.debug("PROCESS_OBJECTS: incoming %d" % len(objects))
 
         for obj in objects:
-            # self.logger.debug("PARSE_OBJECT: checking %s" % obj)
+            # self.logger.debug("PROCESS_OBJECTS: checking %s" % obj)
 
-            if k8s:
-                self.handle_k8s(obj)
-            else:
-                # if not obj:
-                #     self.logger.debug("%s: empty object from %s" % (self.location, serialization))
-
-                self.process_object(obj, rkey=rkey, namespace=namespace)
-                self.ocount += 1
+            self.handle_k8s(obj)
+            self.ocount += 1
 
         self.pop_location()
 
     def process_object(self, obj: dict, rkey: Optional[str]=None, namespace: Optional[str]=None) -> None:
+        """This is the last stop for YAML objects.  If it is a resource type
+        that needs .metadata and .spec together (in to an "old-style"
+        Ambassador resource, since that's still used internaly) that
+        must have already been done.  We take that object and pass
+        that to ACResource.from_dict() or whatever is appropriate.
+
+        Confusingly, this is a very low-level function; it is not an
+        analogue of process_object, which is very high-level.
+
+        """
+
         if not isinstance(obj, dict):
             # Bug!!
             if not obj:
