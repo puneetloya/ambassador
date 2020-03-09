@@ -54,9 +54,6 @@ class ResourceFetcher:
         self.aconf = aconf
         self.logger = logger
         self.elements: List[ACResource] = []
-        self.filename: Optional[str] = None
-        self.ocount: int = 1
-        self.saved: List[Tuple[Optional[str], int]] = []
         self.watch_only = watch_only
 
         self.k8s_endpoints: Dict[str, AnyDict] = {}
@@ -80,18 +77,6 @@ class ResourceFetcher:
 
             if os.path.isdir(init_dir):
                 self.load_from_filesystem(init_dir, k8s=True, recurse=True, finalize=False)
-
-    @property
-    def location(self):
-        return "%s.%d" % (self.filename or "anonymous YAML", self.ocount)
-
-    def push_location(self, filename: Optional[str], ocount: int) -> None:
-        self.saved.append((self.filename, self.ocount))
-        self.filename = filename
-        self.ocount = ocount
-
-    def pop_location(self) -> None:
-        self.filename, self.ocount = self.saved.pop()
 
     def load_from_filesystem(self, config_dir_path, recurse: bool=False,
                              k8s: bool=False, finalize: bool=True):
@@ -132,7 +117,7 @@ class ResourceFetcher:
 
             try:
                 serialization = open(filepath, "r").read()
-                self.parse_yaml(serialization, k8s=k8s, filename=filepath, finalize=False)
+                self.parse_yaml(serialization, k8s=k8s, filename=f"file://{os.path.abspath(filepath)}", finalize=False)
             except IOError as e:
                 self.aconf.post_error("could not read YAML from %s: %s" % (filepath, e))
 
@@ -140,7 +125,7 @@ class ResourceFetcher:
             self.finalize()
 
     def parse_yaml(self, serialization: str, k8s=False, rkey: Optional[str]=None,
-                   filename: Optional[str]=None, finalize: bool=True, namespace: Optional[str]=None,
+                   filename: str=None, finalize: bool=True, namespace: Optional[str]=None,
                    metadata_labels: Optional[Dict[str, str]]=None) -> None:
         # self.logger.info(f"RF YAML: {serialization}")
 
@@ -321,7 +306,7 @@ class ResourceFetcher:
         #     return
 
         # We use this resource identifier as a key into self.k8s_services, and of course for logging .
-        resource_identifier = f'{name}.{namespace}'
+        resource_identifier = f"https://kubernetes{metadata.get('selfLink')}"
 
         # OK. Shallow copy 'spec'...
         amb_object = dict(spec)
@@ -342,25 +327,27 @@ class ResourceFetcher:
         # Done. Parse it.
         self.parse_object([ amb_object ], k8s=False, filename=self.filename, rkey=resource_identifier)
 
-    def parse_object(self, objects, k8s=False, rkey: Optional[str]=None,
-                     filename: Optional[str]=None, namespace: Optional[str]=None):
-        self.push_location(filename, 1)
-
+    def parse_object(self, objects, k8s=False,
+                     filename: str=None, namespace: Optional[str]=None):
         # self.logger.debug("PARSE_OBJECT: incoming %d" % len(objects))
 
+        i = 0
         for obj in objects:
-            # self.logger.debug("PARSE_OBJECT: checking %s" % obj)
+            if filename == "https://kubernetes":
+                obj_filename = f"{filename}{obj.get('metadata', {}).get('selfLink')}"
+            else:
+                obj_filename = f"{filename}#{i}/TODO"
+                # self.logger.debug("PARSE_OBJECT: checking %s" % obj)
 
             if k8s:
-                self.handle_k8s(obj)
+                self.handle_k8s(obj, filename=obj_filename)
             else:
                 # if not obj:
                 #     self.logger.debug("%s: empty object from %s" % (self.location, serialization))
 
-                self.process_object(obj, rkey=rkey, namespace=namespace)
-                self.ocount += 1
+                self.process_object(obj, filename=obj_filename, namespace=namespace)
 
-        self.pop_location()
+            i += 1
 
     def process_object(self, obj: dict, rkey: Optional[str]=None, namespace: Optional[str]=None) -> None:
         if not isinstance(obj, dict):

@@ -53,7 +53,7 @@ def test_lookup():
     aconf = Config()
 
     fetcher = ResourceFetcher(logger, aconf)
-    fetcher.parse_yaml(yaml)
+    fetcher.parse_yaml(yaml, filename='phony://test_lookup.yaml')
 
     aconf.load_all(fetcher.sorted())
 
